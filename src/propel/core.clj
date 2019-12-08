@@ -32,16 +32,13 @@
    'string_length
    'string_includes?
    'close
-   0
-   1
+   10
    true
    false
-   ""
-   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-   "A"
-   "C"
-   "G"
-   "T"))
+   "GB"
+   "B"
+   "MB"
+   "KB"))
 
 (def opens ; number of blocks opened by instructions (default = 0)
   {'exec_dup 1
@@ -415,44 +412,59 @@
 ;;;;;;;;;
 ;; Problem: f(x) = 7x^2 - 20x + 13
 
-(defn target-function-hard
-  "Target function: f(x) = 7x^2 - 20x + 13"
-  [x]
-  (+ (* 7 x x)
-     (* -20 x)
-     13))
+(defn compute-next-row
+  "computes the next row using the prev-row current-element and the other seq"
+  [prev-row current-element other-seq pred]
+  (reduce
+   (fn [row [diagonal above other-element]]
+     (let [update-val (if (pred other-element current-element)
+                         ;; if the elements are deemed equivalent according to the predicate
+                         ;; pred, then no change has taken place to the string, so we are
+                         ;; going to set it the same value as diagonal (which is the previous edit-distance)
+                        diagonal
+                         ;; in the case where the elements are not considered equivalent, then we are going
+                         ;; to figure out if its a substitution (then there is a change of 1 from the previous
+                         ;; edit distance) thus the value is diagonal + 1 or if its a deletion, then the value
+                         ;; is present in the columns, but not in the rows, the edit distance is the edit-distance
+                         ;; of last of row + 1 (since we will be using vectors, peek is more efficient)
+                         ;; or it could be a case of insertion, then the value is above+1, and we chose
+                         ;; the minimum of the three
+                        (inc (min diagonal above (peek row))))]
 
-(defn target-function
-  "Target function: f(x) = x^3 + x + 3"
-  [x]
-  (+ (* x x x)
-     x
-     3))
+       (conj row update-val)))
+    ;; we need to initialize the reduce function with the value of a row, since we are
+    ;; constructing this row from the previous one, the row is a vector of 1 element which
+    ;; consists of 1 + the first element in the previous row (edit distance between the prefix so far
+    ;; and an empty string)
+   [(inc (first prev-row))]
+    ;; for the reduction to go over, we need to provide it with three values, the diagonal
+    ;; which is the same as prev-row because it starts from 0, the above, which is the next element
+    ;; from the list and finally the element from the other sequence itself.
+   (map vector prev-row (next prev-row) other-seq)))
 
-(defn regression-error-function
-  "Finds the behaviors and errors of the individual."
-  [argmap individual]
-  (let [program (push-from-plushy (:plushy individual))
-        inputs (range -10 11)
-        correct-outputs (map target-function inputs)
-        outputs (map (fn [input]
-                       (peek-stack
-                        (interpret-program
-                         program
-                         (assoc empty-push-state :input {:in1 input})
-                         (:step-limit argmap))
-                        :integer))
-                     inputs)
-        errors (map (fn [correct-output output]
-                      (if (= output :no-stack-item)
-                        1000000
-                        (abs (- correct-output output))))
-                    correct-outputs
-                    outputs)]
-    (assoc individual
-           :behaviors outputs
-           :errors errors
-           :total-error (apply +' errors))))
+(defn levenshtein-distance
+  "Levenshtein Distance - http://en.wikipedia.org/wiki/Levenshtein_distance
+     In information theory and computer science, the Levenshtein distance is a
+     metric for measuring the amount of difference between two sequences. This
+     is a functional implementation of the levenshtein edit
+     distance with as little mutability as possible.
+     Still maintains the O(n*m) guarantee."
+  [a b & {p :predicate  :or {p =}}]
+  (cond
+    (empty? a) (count b)
+    (empty? b) (count a)
+    :else (peek
+           (reduce
+              ;; we use a simple reduction to convert the previous row into the next-row  using the
+              ;; compute-next-row which takes a current element, the previous-row computed so far
+              ;; and the predicate to compare for equality.
+            (fn [prev-row current-element]
+              (compute-next-row prev-row current-element b p))
+              ;; we need to initialize the prev-row with the edit distance between the various prefixes of
+              ;; b and the empty string.
+            (range (inc (count b)))
+            a))))
+
 
 ;;;;;;;;;
 ;; String classification
@@ -461,8 +473,8 @@
   "Finds the behaviors and errors of the individual."
   [argmap individual]
   (let [program (push-from-plushy (:plushy individual))
-        inputs ["GCG" "GACAG" "AGAAG" "CCCA" "GATTACA" "TAGG" "GACT"]
-        correct-outputs [false false false false true true true]
+        inputs [1, 10, 100, 864, 777, 34, 10001, 12455, 4565, 4357, 7777, 1234, 11109, 11145, 111156, 876478, 115656, 109900, 1009898, 4567555, 1232333, 4545444, 2334545, 2345656, 1000000, 1000001, 1000002, 11122324, 10000001, 34345699, 19845854, 78945612, 12121555, 77777777, 12558982, 12547875, 12547884, 78965555, 100000001, 100000002, 200145455, 454545454, 789888777, 1112221222, 2212221588, 7899875220, 1000004444, 10000000004]
+        correct-outputs ['1.0B', '10.0B', '100.0B', '864.0B', '777.0B', '34.0B', '9.8KB', '12.2KB', '4.5KB', '4.3KB', '7.6KB', '1.2KB', '10.8KB', '10.9KB', '108.6KB', '855.9KB', '112.9KB', '107.3KB', '986.2KB', '4.4MB', '1.2MB', '4.3MB', '2.2MB', '2.2MB', '976.6KB', '976.6KB', '976.6KB', '10.6MB', '9.5MB', '32.8MB', '18.9MB', '75.3MB', '11.6MB', '74.2MB', '12.0MB', '12.0MB', '12.0MB', '75.3MB', '95.4MB', '95.4MB', '190.9MB', '433.5MB', '753.3MB', '1.0GB', '2.1GB', '7.4GB', '953.7MB', '9.3GB']
         outputs (map (fn [input]
                        (peek-stack
                         (interpret-program
@@ -489,7 +501,7 @@
   [& args]
   (binding [*ns* (the-ns 'propel.core)]
     (propel-gp (update-in (merge {:instructions default-instructions
-                                  :error-function regression-error-function
+                                  :error-function string-classification-error-function
                                   :max-generations 500
                                   :population-size 200
                                   :max-initial-plushy-size 50

@@ -505,14 +505,14 @@
                          program
                          (assoc empty-push-state :input {:in1 input})
                          (:step-limit argmap))
-                        :boolean))
+                        :string))
                      inputs)
         errors (map (fn [correct-output output]
                       (if (= output :no-stack-item)
                         1000000
                         (if (= correct-output output)
                           0
-                          1)))
+                          (levenshtein-distance correct-output output))))
                     correct-outputs
                     outputs)]
     (assoc individual

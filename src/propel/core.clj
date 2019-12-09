@@ -32,7 +32,9 @@
    'string_length
    'string_includes?
    'close
-   10
+   'double_trim
+   'double_divide10
+   'int_to_double
    true
    false
    "GB"
@@ -52,6 +54,7 @@
    :integer '()
    :string '()
    :boolean '()
+   :double '()
    :input {}})
 
 (defn abs
@@ -124,6 +127,31 @@
 ;;;;;;;;;
 ;; Instructions
 
+(defn double_divide10
+  [state]
+  (make-push-instruction state
+                         (fn [d1]
+                             (/ d1 10))
+                         [:double]
+                         :double))
+
+(defn double_trim
+  "Trims all but the rightmost floating point"
+  [state]
+  (make-push-instruction state
+                         (fn [d1]
+                             (format "%.1f" d1))
+                         [:double]
+                         :string))
+
+(defn int_to_double
+  "Converts integer to double"
+  [state]
+  (make-push-instruction state
+                         (fn [int1]
+                           (double int1))
+                         [:integer]
+                         :double))
 (defn in1
   "Pushes the input labeled :in1 on the inputs map onto the :exec stack."
   [state]
@@ -139,11 +167,15 @@
 
 (defn integer_*
   [state]
+  ;; => CompilerException java.lang.RuntimeException: Unable to resolve symbol: state in this context, compiling:(/home/koehl238/git/propel/src/propel/core.clj:1:8020) 
+
   (make-push-instruction state *' [:integer :integer] :integer))
 
 (defn integer_%
   [state]
   (make-push-instruction state
+                         ;; => CompilerException java.lang.RuntimeException: Unable to resolve symbol: state in this context, compiling:(/home/koehl238/git/propel/src/propel/core.clj:1:8020) 
+
                          (fn [int1 int2]
                            (if (zero? int2)
                              int1
@@ -474,7 +506,7 @@
   [argmap individual]
   (let [program (push-from-plushy (:plushy individual))
         inputs [1, 10, 100, 864, 777, 34, 10001, 12455, 4565, 4357, 7777, 1234, 11109, 11145, 111156, 876478, 115656, 109900, 1009898, 4567555, 1232333, 4545444, 2334545, 2345656, 1000000, 1000001, 1000002, 11122324, 10000001, 34345699, 19845854, 78945612, 12121555, 77777777, 12558982, 12547875, 12547884, 78965555, 100000001, 100000002, 200145455, 454545454, 789888777, 1112221222, 2212221588, 7899875220, 1000004444, 10000000004]
-        correct-outputs ['1.0B', '10.0B', '100.0B', '864.0B', '777.0B', '34.0B', '9.8KB', '12.2KB', '4.5KB', '4.3KB', '7.6KB', '1.2KB', '10.8KB', '10.9KB', '108.6KB', '855.9KB', '112.9KB', '107.3KB', '986.2KB', '4.4MB', '1.2MB', '4.3MB', '2.2MB', '2.2MB', '976.6KB', '976.6KB', '976.6KB', '10.6MB', '9.5MB', '32.8MB', '18.9MB', '75.3MB', '11.6MB', '74.2MB', '12.0MB', '12.0MB', '12.0MB', '75.3MB', '95.4MB', '95.4MB', '190.9MB', '433.5MB', '753.3MB', '1.0GB', '2.1GB', '7.4GB', '953.7MB', '9.3GB']
+        correct-outputs ["1.0B", "10.0B", "100.0B", "864.0B", "777.0B", "34.0B", "9.8KB", "12.2KB", "4.5KB", "4.3KB", "7.6KB", "1.2KB", "10.8KB", "10.9KB", "108.6KB", "855.9KB", "112.9KB", "107.3KB", "986.2KB", "4.4MB", "1.2MB", "4.3MB", "2.2MB", "2.2MB", "976.6KB", "976.6KB", "976.6KB", "10.6MB", "9.5MB", "32.8MB", "18.9MB", "75.3MB", "11.6MB", "74.2MB", "12.0MB", "12.0MB", "12.0MB", "75.3MB", "95.4MB", "95.4MB", "190.9MB", "433.5MB", "753.3MB", "1.0GB", "2.1GB", "7.4GB", "953.7MB", "9.3GB"]
         outputs (map (fn [input]
                        (peek-stack
                         (interpret-program

@@ -13,11 +13,6 @@
 (def default-instructions
   (list
    'in1
-   'integer_+
-   'integer_-
-   'integer_*
-   'integer_%
-   'integer_=
    'exec_dup
    'exec_if
    'boolean_and
@@ -25,9 +20,6 @@
    'boolean_not
    'boolean_=
    'string_=
-   'string_take
-   'string_drop
-   'string_reverse
    'string_concat
    'string_length
    'string_includes?
@@ -538,7 +530,7 @@
                                   :population-size 200
                                   :max-initial-plushy-size 50
                                   :step-limit 100
-                                  :parent-selection :tournament
+                                  :parent-selection :lexicase
                                   :tournament-size 5}
                                  (apply hash-map
                                         (map read-string args)))

@@ -1,6 +1,8 @@
 (ns propel.core
   (:gen-class))
 
+(require '[clojure.edn :as edn])
+
 (def example-push-state
   {:exec '()
    :integer '(1 2 3 4 5 6 7)
@@ -163,6 +165,7 @@
                            (double int1))
                          [:integer]
                          :double))
+
 (defn int_inc
   [state]
   (make-push-instruction state inc' [:integer] :integer))
@@ -527,10 +530,53 @@
             a))))
 
 
-;;;;;;;;;
-;; String classification
+; ;;;;;;;;
+; ; String classification
 
-; THIS ONE USES LEVEINSTEIN DISTANCE
+; ; THIS ONE USES LEVEINSTEIN DISTANCE
+; (defn string-classification-error-function
+;   "Finds the behaviors and errors of the individual."
+;   [argmap individual]
+;   (let [program (push-from-plushy (:plushy individual))
+;         inputs [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 864, 777, 34, 10001, 12455, 4565, 4357, 7777, 1234, 11109, 11145, 111156, 876478, 115656, 109900, 1009898, 4567555, 1232333, 4545444, 2334545, 2345656, 1000000, 1000001, 1000002, 11122324, 10000001, 34345699, 19845854, 78945612, 12121555, 77777777, 12558982, 12547875, 12547884, 78965555, 100000001, 100000002, 200145455, 454545454, 789888777, 1112221222, 2212221588, 7899875220, 1000004444, 10000000004]
+;         correct-outputs ["1.0B", "2.0B" "3.0B" "4.0B" "5.0B" "6.0B" "7.0B" "8.0B" "9.0B" "10.0B", "100.0B", "864.0B", "777.0B", "34.0B", "9.8KB", "12.2KB", "4.5KB", "4.3KB", "7.6KB", "1.2KB", "10.8KB", "10.9KB", "108.6KB", "855.9KB", "112.9KB", "107.3KB", "986.2KB", "4.4MB", "1.2MB", "4.3MB", "2.2MB", "2.2MB", "976.6KB", "976.6KB", "976.6KB", "10.6MB", "9.5MB", "32.8MB", "18.9MB", "75.3MB", "11.6MB", "74.2MB", "12.0MB", "12.0MB", "12.0MB", "75.3MB", "95.4MB", "95.4MB", "190.9MB", "433.5MB", "753.3MB", "1.0GB", "2.1GB", "7.4GB", "953.7MB", "9.3GB"]
+;         outputs (map (fn [input]
+;                        (peek-stack
+;                         (interpret-program
+;                          program
+;                          (assoc empty-push-state :input {:in1 input})
+;                          (:step-limit argmap))
+;                         :string))
+;                      inputs)
+;         errors (map (fn [correct-output output]
+;                       (if (= output :no-stack-item)
+;                         1000000
+;                         (if (= correct-output output)
+;                           0
+;                           (levenshtein-distance correct-output output))))
+;                     correct-outputs
+;                     outputs)]
+;     (assoc individual
+;            :behaviors outputs
+;            :errors errors
+;            :total-error (apply +' errors))))
+
+;;;;;;;;
+; String classification
+
+; THIS ONE USES THREE INDIPENDANT ERRORS
+
+(defn smart-read-string
+  [inpt]
+  (if (= inpt "")
+    10000000.0
+    (try
+      (edn/read-string inpt)
+      (catch NumberFormatException e "slkdfj" 1000000.0)
+      (catch NullPointerException e "sldjkf" 100000.0)
+      (catch Exception e "sldfjksldfjk" 1000000000.0))))
+
+
 (defn string-classification-error-function
   "Finds the behaviors and errors of the individual."
   [argmap individual]
@@ -545,12 +591,15 @@
                          (:step-limit argmap))
                         :string))
                      inputs)
-        errors (map (fn [correct-output output]
-                      (if (= output :no-stack-item)
-                        1000000
-                        (if (= correct-output output)
-                          0
-                          (levenshtein-distance correct-output output))))
+        errors (mapcat (fn [correct-output output]
+                        ;  (println (str "Correct output = " correct-output " and output = " output))
+                         (if (= output :no-stack-item)
+                           [1000000 1000000 1000000]
+                           (if (= correct-output output)
+                             [0 0 0]
+                             [(* 100 (levenshtein-distance correct-output output))
+                              (* 100 (abs (- (smart-read-string (clojure.string/replace correct-output #"[BKMG]" "")) (smart-read-string (clojure.string/replace output #"[BKMG]" "")))))
+                              (* 1 (levenshtein-distance (clojure.string/replace correct-output #"[.0-9]" "") (clojure.string/replace output #"[.0-9]" "")))])))
                     correct-outputs
                     outputs)]
     (assoc individual
@@ -558,33 +607,7 @@
            :errors errors
            :total-error (apply +' errors))))
 
-; THIS VERSION TRIES TO COMPARE NUMBER
-; (defn string-classification-error-function
-;   "Finds the behaviors and errors of the individual."
-;   [argmap individual]
-;   (let [program (push-from-plushy (:plushy individual))
-;         inputs [1, 10, 100, 864, 777, 34, 10001, 12455, 4565, 4357, 7777, 1234, 11109, 11145, 111156, 876478, 115656, 109900, 1009898, 4567555, 1232333, 4545444, 2334545, 2345656, 1000000, 1000001, 1000002, 11122324, 10000001, 34345699, 19845854, 78945612, 12121555, 77777777, 12558982, 12547875, 12547884, 78965555, 100000001, 100000002, 200145455, 454545454, 789888777, 1112221222, 2212221588, 7899875220, 1000004444, 10000000004]
-;         correct-outputs ["1.0B", "10.0B", "100.0B", "864.0B", "777.0B", "34.0B", "9.8KB", "12.2KB", "4.5KB", "4.3KB", "7.6KB", "1.2KB", "10.8KB", "10.9KB", "108.6KB", "855.9KB", "112.9KB", "107.3KB", "986.2KB", "4.4MB", "1.2MB", "4.3MB", "2.2MB", "2.2MB", "976.6KB", "976.6KB", "976.6KB", "10.6MB", "9.5MB", "32.8MB", "18.9MB", "75.3MB", "11.6MB", "74.2MB", "12.0MB", "12.0MB", "12.0MB", "75.3MB", "95.4MB", "95.4MB", "190.9MB", "433.5MB", "753.3MB", "1.0GB", "2.1GB", "7.4GB", "953.7MB", "9.3GB"]
-;         outputs (map (fn [input]
-;                        (peek-stack
-;                         (interpret-program
-;                          program
-;                          (assoc empty-push-state :input {:in1 input})
-;                          (:step-limit argmap))
-;                         :string))
-;                      inputs)
-;         errors (map (fn [correct-output output]
-;                       (if (= output :no-stack-item)
-;                         1000000
-;                         (if (= correct-output output)
-;                           0
-;                           (abs (- (Float/parseFloat (clojure.string/replace correct-output "\\D" "")) (Float/parseFloat (clojure.string/replace output "\\D" "")))))))
-;                     correct-outputs
-;                     outputs)]
-;     (assoc individual
-;            :behaviors outputs
-;            :errors errors
-;            :total-error (apply +' errors))))
+
 
 (defn -main
   "Runs propel-gp, giving it a map of arguments."

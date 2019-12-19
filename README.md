@@ -1,46 +1,75 @@
 # propel
 
-Lee Spector's Plushy fork of Tom Helmuth's little PushGP implementation in Clojure.
+Liam Koehlers GP fork of Nic Mcphees fork of Lee Spector's Plushy fork of Tom Helmuth's little PushGP implementation in Clojure.
 
-## Usage
+## The problem:
+The hope is to evolve a solution to converting a byte-string into a human readable format. This was inspired by [this blog post](https://programming.guide/worlds-most-copied-so-snippet.html), which talks about how the most-copied code snippet on Java StackOverflow is a (flawed) piece of code to do that conversion.
 
-To run PushGP on the default genetic programming problem from a REPL, load propel.core into your REPL (i.e. `lein repl`), and run `(-main)`.
+The original question can be [found here](https://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java/38390338)
 
-To run PushGP on the default genetic programming problem from command line, execute `lein run`. Command-line arguments may be provided to override the defaults specified in `-main`, for example, `lein run :population-size 100`. You can use something like `lein run | tee outfile` to send output both to the terminal and to `outfile`.
+In general, the goal is to make conversions of this form:
+```
+110592:       110.6 KB  
+7077888:      7.1 MB    
+452984832:    453.0 MB  
+28991029248:  29.0 GB
+```
+### Simplifications:
+I initially chose to simplify the problem in a number of ways.
+ - **Use SI units:** Although I don't have any hard proof of this, my assumption is that dividing down by powers of 10 would be easier to handle then dividing down by powers of 1024. For this reason I chose to represent my data in [SI Units](https://www.wikiwand.com/en/Metric_prefix) such as MB, as opposed MiB.
+ - **Reduce the number of postfixes:** Postfixes for bytes in SI go up to [Yottabytes](https://www.wikiwand.com/en/Yottabyte), which is 10^8. I made the assumption that locking the problem to a smaller set would help the genetic programming succeed. For this reason, I locked my test cases to: B, KB, MG, GB.
 
-## Description
+## Initial Setup:
+My initial setup consisted of a fairly limited set of instructions. All integer operations were stripped out, as well as most string operations. Exec operations were left in. All SI posfixes were included as strings.
 
-Propel is a minimalist implementation of the Push programming language and the PushGP genetic programming system in Clojure.
+Errors for the strings were calculated by [Levenshtein distance](https://www.wikiwand.com/en/Levenshtein_distance).
 
-For more information on Push and PushGP see [http://pushlanguage.org](http://pushlanguage.org).
+Thirty-ish test cases were added, generated using a simple script I wrote. These can be seen in src/core.clj.
 
-Propel was developed largely as a teaching tool, with the goal of conveying the core concepts of Push and PushGP as clearly and concisely as possible.
+A new `double` stack was added.
 
-As of this writing, only a few data types and instructions are provided, but the intention is for these to serve as models for additions.
+The following unique operations were provided:
+ - int_to_double: convert integer to double.
+ - double_divide10: divide double by 10. I created this instruction because I thought that independantly figuring out how to divide by 10 was too much to ask.
+ - double_trim: trimmed double to one decimal place, and converted to string. This was added to streamline the proccess of "outputting" a result.
 
-All of the code is in [src/propel/core.clj](https://github.com/lspector/propel/blob/master/src/propel/core.clj), while a [Gorilla REPL](http://gorilla-repl.org) worksheet showing a few examples (to which you can add in your copy) is in [worksheet.clj](https://github.com/lspector/propel/blob/master/worksheet.clj). You can view the repository's version of the worksheet, formatted (read-only), [here](http://viewer.gorilla-repl.org/view.html?source=github&user=lspector&repo=propel&path=worksheet.clj).
+The hope with this setup is that the algorothm would:
+- Read in int
+- Convert to double
+- Divide double by 10 n times
+- Convert to string
+- Append the correct SI postfix
 
-### The Plushy Part
+The success with this setup was abysmal. No meaningfull evolution occured. The algorithm would find a homogenous "solution" such as 12.0MB, and print this value, ignoring all inputs. This suggests there was some cliffs that the algorithm wanted to avoid.
 
-In a genetic programming system, programs are randomly varied and recombined, with the goal of finding a program that serves a specified purpose. 
+## Improvements:
+Over the course of the project, I fiddled with the problem a lot, and made many different attempts. I would itemize all of these attempts, but sadly they were all failures. Exceptions will be noted below.
 
-In what form should the programs be represented for the sake of random variation and recombination? 
+### Strong error function:
+One of the big things I added was a stronger error function. This was created by adding a three-double vector as the error, instead of a single number. This was build as:
+- Levenshtein distance
+- Levenstein distance of *only* the postfix (numbers stripped out)
+- The absolute value of the numbers (postfix stripped out)
 
-Push programs are parenthesized lists of instructions and values, which can include sub-programs in sub-lists.
+These three error vectors could be multiplied by a arbitrary ammount, which allowed me to "tune" what the algorithm was searching for. By multiply by 0, I could even "turn off" one of the error types.
 
-In early versions of PushGP, Push programs were varied and recombined in their "natural" form, as possibly-nested lists of instructions and values that could be added, deleted, and replaced at any level of nesting.
+### Re-adding better integer support:
+Something that Nic pointed out is that I didn't give my algorithm a good way to "count" the number of divisions it was making. For this reason, I re-added all the integer functions, as well as 0-9 as primitives. I also added a `int_inc` functionality for incrementing the top of the integer stack.
 
-Later, however, linear (un-nested) representations of Push programs were developed, which:
+### Adding exec_while
+It was also pointed out that I didn't have any good looping controls. Exec while was added for this reason. Better boolean support was also added at this stage.
 
-- Provide better support for *uniform* variation operators (in which each program component has an equal likelihood of being affected).
+## Final Setup Results:
+My final setup consisted as described above. You can see this final setup in src/core.clj.
 
-- Increase the likelihood that programs will be nested where nesting matters, to form code blocks that are executed conditionally or repeatedly.
+Sadly, I wasn't able to make any meaningfull progress on the evolution. The algorithm would still print out a random homogenous value, such as 12.0MB. This would balance out after only 10-20 iterations, and would stay for upwards of a few hundred. Despite much effort in changing the population size, and tuning the error function, the algorithm was unable to learn.
 
-When these linear representations are used, they are translated into ordinary, possibly-nested Push programs prior to execution. The placement of opening parentheses is determined implicitly, by the positions of instructions that make use of nested code blocks. The placement of closing parentheses is indicated explicitly, as part of the linear representation.
+### Limited success: Memorization
+At one point, the algorithm did learn the numbers for the first 10 elements of the input, but sadly this was just memorization. It did not generalize at all to the harder (larger, less ordered) test cases.
 
-In the [Plush](https://push-language.hampshire.edu/t/plush-genomes/279) representation that is used in [Clojush](https://github.com/lspector/Clojush) and [PyshGP](https://github.com/erp12/pyshgp), markers are attached to instructions to indicate how many closing parentheses should be inserted after that instruction is translated.
+## Why I think it failed:
+I believe this algorithm failed because of the harshness of my error function. Since the input numbers are so large (such as 28991029248) and the output numbers are so small (such as 29.0), the penalty of the absolute value is very big. Levenshtein distance also penalizes this large discrepancy.
 
-Here, we instead use the "Plushy" representation, in which we allow `close` instructions to be included in the linear sequences of instructions. These are converted into closing parentheses during translation to Push programs.
+To avoid this huge error function, the algorithm needs to either: ignore input, and print a simple, median result such as 12.0MB, or it needs to use the double_div10 MANY times. The in-between "learning-stage" of using double_div10 a *few* times was penalized a lot. 
 
-
-
+For this reason I believe the bot simply ignored the input numbers, and built its own reasoanable answers.
